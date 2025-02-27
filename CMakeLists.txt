@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 add_library(${PROJECT_NAME} INTERFACE)
 target_include_directories(${PROJECT_NAME} INTERFACE src)
 
-find_package(gtest REQUIRED)
+find_package(GTest REQUIRED)
 add_executable(${PROJECT_NAME}_test test/faux_combinator.cpp)
 include_directories(${GTest_INCLUDE_DIR} src)
 target_link_libraries(${PROJECT_NAME}_test GTest::gtest_main)

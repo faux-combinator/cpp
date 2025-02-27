@@ -33,9 +33,9 @@ namespace FauxCombinator {
       , index(0) {
     }
 
-    bool isEOF() { return index >= tokens.size(); }
+    bool isEOF() const { return index >= tokens.size(); }
 
-    Token<TT> const* peek() {
+    Token<TT> const* peek() const {
       if (isEOF()) throw ParserException{"EOF"};
       return tokens.data() + index;
     }
