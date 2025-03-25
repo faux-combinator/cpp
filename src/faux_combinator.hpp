@@ -8,96 +8,110 @@
 namespace FauxCombinator {
 
   struct ParserException : public std::runtime_error {
-    ParserException(std::string);
+    ParserException(std::string s)
+      : std::runtime_error{std::move(s)} {
+      }
   };
 
-  ParserException::ParserException(std::string s)
-    : std::runtime_error{std::move(s)} {
-  }
+  template<typename T>
+  concept Token = requires (T const a, typename T::type const& b) {
+    typename T::type;
+    { a.accepts(b) } -> std::same_as<bool>;
+  };
 
+  // Simple, easy-to-use for a simple lexing library
   template<typename TT>
-  struct Token {
+  struct StringViewToken {
+    using type = TT;
+    bool accepts(TT const& t) const {
+      return tokenType == t;
+    }
+
     TT const tokenType;
     std::string_view const tokenData;
   };
 
-  template<typename TT>
+  static_assert(Token<StringViewToken<int>>);
+
+  template<Token T>
   struct Parser {
-    Parser(std::initializer_list<Token<TT>> xs)
+    using TT = typename T::type;
+
+    Parser(std::initializer_list<T> xs)
       : tokens(xs)
       , index(0) {
     }
 
-    Parser(std::vector<Token<TT>>&& xs)
+    Parser(std::vector<T>&& xs)
       : tokens(std::move(xs))
       , index(0) {
     }
 
     bool isEOF() const { return index >= tokens.size(); }
 
-    Token<TT> const* peek() const {
+    T const* peek() const {
       if (isEOF()) throw ParserException{"EOF"};
       return tokens.data() + index;
     }
 
-    Token<TT> const* expect(TT tt) {
+    T const* expect(TT const& t) {
       if (isEOF()) throw ParserException{"EOF"};
-      Token<TT> const* next = peek();
-      if (next->tokenType == tt) {
+      T const* next = peek();
+      if (next->accepts(t)) {
         ++index;
         return next;
       }
       throw ParserException{"Wrong type"};
     }
 
-    template<typename T, typename F>
-    std::optional<T> attempt(F&& f) {
+    template<typename R, typename F>
+    std::optional<R> attempt(F&& f) {
       size_t rollback = index;
       try {
-        return std::optional { f() };
+        return std::optional { std::forward<F>(f)() };
       } catch (ParserException) {
         index = rollback;
         return std::nullopt;
       }
     }
 
-    template<typename T>
-    std::unique_ptr<T> either() {
+    template<typename R>
+    std::unique_ptr<R> either() {
       throw ParserException{"Either unmatched"};
     }
 
-    template<typename T, typename F, typename... Fs>
-    std::unique_ptr<T> either(F f, Fs... fs) {
+    template<typename R, typename F, typename... Fs>
+    std::unique_ptr<R> either(F&& f, Fs... fs) {
       size_t rollback = index;
       try {
-        return f();
+        return std::forward<F>(f)();
       } catch (ParserException) {
         index = rollback;
-        return either<T, Fs...>(fs...);
+        return either<R, Fs...>(std::forward<Fs>(fs)...);
       }
     }
     
-    template<typename T, typename F>
-    std::vector<std::unique_ptr<T>> any(F f) {
-      std::vector<std::unique_ptr<T>> xs;
-      while (auto res = attempt<std::unique_ptr<T>>(f)) {
+    template<typename R, typename F>
+    std::vector<std::unique_ptr<R>> any(F&& f) {
+      std::vector<std::unique_ptr<R>> xs;
+      while (auto res = attempt<std::unique_ptr<R>>(f)) {
         xs.emplace_back(std::move(*res));
       }
       return xs;
     }
 
-    template<typename T, typename F>
-    std::vector<std::unique_ptr<T>> many(F f) {
-      std::vector<std::unique_ptr<T>> xs;
+    template<typename R, typename F>
+    std::vector<std::unique_ptr<R>> many(F&& f) {
+      std::vector<std::unique_ptr<R>> xs;
       xs.emplace_back(f());
-      while (auto res = attempt<std::unique_ptr<T>>(f)) {
+      while (auto res = attempt<std::unique_ptr<R>>(f)) {
         xs.emplace_back(std::move(*res));
       }
       return xs;
     }
 
   private:
-    std::vector<Token<TT>> tokens;
+    std::vector<T> tokens;
     size_t index;
   };
 

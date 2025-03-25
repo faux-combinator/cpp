@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 #include <faux_combinator.hpp>
 
-enum MyTokenType { TokenLparen, TokenRparen, TokenId };
+enum class MyToken { TokenLparen, TokenRparen, TokenId };
+using enum MyToken;
+using MyTokenType = FauxCombinator::StringViewToken<MyToken>;
+using Token = MyTokenType const*; // TODO rename PCToken (?)
 
 TEST(FauxCombinatorTest, isEOF) {
   {
@@ -71,7 +74,6 @@ TEST(FauxCombinatorTest, expect) {
 TEST(FauxCombinatorTest, attempt) {
   {
     FauxCombinator::Parser<MyTokenType> p { };
-    using Token = FauxCombinator::Token<MyTokenType> const*;
     ASSERT_FALSE(p.attempt<Token>([&p]() { return p.peek(); }));
   }
 
@@ -79,7 +81,6 @@ TEST(FauxCombinatorTest, attempt) {
     FauxCombinator::Parser<MyTokenType> p {
       { TokenLparen, "(" },
     };
-    using Token = FauxCombinator::Token<MyTokenType> const*;
     ASSERT_FALSE(p.attempt<Token>([&p]() { return p.expect(TokenRparen); }));
   }
 
@@ -87,7 +88,6 @@ TEST(FauxCombinatorTest, attempt) {
     FauxCombinator::Parser<MyTokenType> p {
       { TokenLparen, "(" },
     };
-    using Token = FauxCombinator::Token<MyTokenType> const*;
     ASSERT_FALSE(p.attempt<std::unique_ptr<Token>>([&p]() { return p.either<Token>(); }));
   }
 }
@@ -95,7 +95,6 @@ TEST(FauxCombinatorTest, attempt) {
 TEST(FauxCombinatorTest, either) {
   EXPECT_THROW({
     FauxCombinator::Parser<MyTokenType> p { };
-    using Token = FauxCombinator::Token<MyTokenType> const*;
     p.either<Token>();
   }, FauxCombinator::ParserException);
 
@@ -103,7 +102,7 @@ TEST(FauxCombinatorTest, either) {
     FauxCombinator::Parser<MyTokenType> p {
       { TokenId, "a" },
     };
-    using Token = FauxCombinator::Token<MyTokenType> const*;
+    //using Token = FauxCombinator::Token<MyTokenType> const*;
     p.either<std::string>(
       [&p]() { return std::make_unique<std::string>(p.expect(TokenLparen)->tokenData); },
       [&p]() { return std::make_unique<std::string>(p.expect(TokenRparen)->tokenData); }
@@ -114,7 +113,6 @@ TEST(FauxCombinatorTest, either) {
     FauxCombinator::Parser<MyTokenType> p {
       { TokenLparen, "(" },
     };
-    using Token = FauxCombinator::Token<MyTokenType> const*;
     auto res = p.either<std::string>(
       [&p]() { return std::make_unique<std::string>(p.expect(TokenLparen)->tokenData); },
       [&p]() { return std::make_unique<std::string>(p.expect(TokenRparen)->tokenData); }
@@ -126,7 +124,6 @@ TEST(FauxCombinatorTest, either) {
     FauxCombinator::Parser<MyTokenType> p {
       { TokenLparen, ")" },
     };
-    using Token = FauxCombinator::Token<MyTokenType> const*;
     auto res = p.either<std::string>(
       [&p]() { return std::make_unique<std::string>(p.expect(TokenLparen)->tokenData); },
       [&p]() { return std::make_unique<std::string>(p.expect(TokenRparen)->tokenData); }
@@ -208,15 +205,15 @@ TEST(FauxCombinatorTest, many) {
 }
 
 struct Expr {
-  virtual std::string format() = 0;
+  virtual std::string format() const = 0;
   virtual ~Expr() = 0;
 };
-Expr::~Expr() {}
+Expr::~Expr() = default;
 struct Id : Expr {
   std::string_view const id;
   Id(std::string_view _id) : id(_id) {}
   
-  std::string format() override { return std::string{id}; }
+  std::string format() const override { return std::string{id}; }
 };
 struct Call : Expr {
   std::unique_ptr<Expr> callee; 
@@ -227,7 +224,7 @@ struct Call : Expr {
     , arguments(std::move(_arguments)) {
   }
 
-  std::string format() override {
+  std::string format() const override {
     std::string fmt = callee->format();
     fmt += "(";
     if (!arguments.empty()) {
